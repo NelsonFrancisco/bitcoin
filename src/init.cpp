@@ -1051,7 +1051,10 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     // Make sure enough file descriptors are available
     int nBind = std::max(nUserBind, size_t(1));
     nUserMaxConnections = args.GetArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
-    nMaxConnections = std::max(nUserMaxConnections, 0);
+    nMaxConnections = nUserMaxConnections;
+    if(nMaxConnections < 0){
+        return InitError(_("Cannot set -maxconnections to a negative value"));
+    }
 
     // Trim requested connection counts, to fit into system limitations
     // <int> in std::min<int>(...) to work around FreeBSD compilation issue described in #2695
