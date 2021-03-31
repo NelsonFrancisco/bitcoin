@@ -1051,27 +1051,36 @@ bool AppInitParameterInteraction(const ArgsManager& args)
     // Make sure enough file descriptors are available
     int nBind = std::max(nUserBind, size_t(1));
     nUserMaxConnections = args.GetArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
-    nMaxConnections = nUserMaxConnections;
-    if(nMaxConnections < 0){
+    if(nUserMaxConnections < 0){
         return InitError(_("Cannot set -maxconnections to a negative value"));
     }
 
     // Trim requested connection counts, to fit into system limitations
     // <int> in std::min<int>(...) to work around FreeBSD compilation issue described in #2695
-    nFD = RaiseFileDescriptorLimit(nMaxConnections + MIN_CORE_FILEDESCRIPTORS + MAX_ADDNODE_CONNECTIONS + nBind + NUM_FDS_MESSAGE_CAPTURE);
+    nFD = RaiseFileDescriptorLimit(nUserMaxConnections + MIN_CORE_FILEDESCRIPTORS + MAX_ADDNODE_CONNECTIONS + nBind + NUM_FDS_MESSAGE_CAPTURE);
 
 #ifdef USE_POLL
     int fd_max = nFD;
 #else
     int fd_max = FD_SETSIZE;
 #endif
-    nMaxConnections = std::max(std::min<int>(nMaxConnections, fd_max - nBind - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS - NUM_FDS_MESSAGE_CAPTURE), 0);
-    if (nFD < MIN_CORE_FILEDESCRIPTORS)
+    const int nTempMaxConnections = std::max(
+        std::min<int>(nUserMaxConnections, fd_max - nBind - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS - NUM_FDS_MESSAGE_CAPTURE), 
+        0
+    );
+    
+    if (nFD < MIN_CORE_FILEDESCRIPTORS){
         return InitError(_("Not enough file descriptors available."));
-    nMaxConnections = std::min(nFD - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS - NUM_FDS_MESSAGE_CAPTURE, nMaxConnections);
+    }
 
-    if (nMaxConnections < nUserMaxConnections)
-        InitWarning(strprintf(_("Reducing -maxconnections from %d to %d, because of system limitations."), nUserMaxConnections, nMaxConnections));
+    if (nTempMaxConnections < nUserMaxConnections) {
+        InitWarning(strprintf(_("Reducing -maxconnections from %d to %d, because of system limitations."), nUserMaxConnections, nTempMaxConnections));
+        nMaxConnections = nTempMaxConnections;
+    }
+    else{
+        nMaxConnections = nFD - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS - NUM_FDS_MESSAGE_CAPTURE;
+    }
+
 
     // ********************************************************* Step 3: parameter-to-internal-flags
     if (args.IsArgSet("-debug")) {
